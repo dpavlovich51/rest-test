@@ -1,12 +1,14 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"time"
 
 	// Add logger
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
 	// log rotation
 	"gopkg.in/natefinch/lumberjack.v2"
 	// Add server library
@@ -14,14 +16,21 @@ import (
 )
 
 func SetUpLogger() {
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-	log.Logger = log.Output(&lumberjack.Logger{
-		Filename:   "app.log",
-		MaxSize:    10, // МБ
-		MaxBackups: 5,
-		// MaxAge:     28, // дней
-		Compress: true,
-	})
+	date := time.Now().Format("2006-01-02") // YYYY-MM-DD
+	filename := fmt.Sprintf("log/app-%s.log", date)
+
+	zerolog.MultiLevelWriter(
+		// Add steaming for console 
+		log.Output(zerolog.ConsoleWriter{Out: os.Stderr}),
+		// Add Logger for files 
+		log.Output(&lumberjack.Logger{
+			Filename:   filename,
+			MaxSize:    10, // МБ
+			MaxBackups: 5,
+			// MaxAge:     28, // дней
+			Compress: true,
+		}),
+	)
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 }
 

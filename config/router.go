@@ -30,7 +30,8 @@ func GetAllMessages(response http.ResponseWriter, request *http.Request) {
 }
 
 func GetMessage(response http.ResponseWriter, request *http.Request) {
-	log.Info().Msg("Called GetMessage")
+	vars := mux.Vars(request)
+	log.Info().Msgf("Called GetMessage with id: %s", vars["id"])
 }
 
 func PostMessage(response http.ResponseWriter, request *http.Request) {
