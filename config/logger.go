@@ -19,19 +19,20 @@ func SetUpLogger() {
 	date := time.Now().Format("2006-01-02") // YYYY-MM-DD
 	filename := fmt.Sprintf("log/app-%s.log", date)
 
-	zerolog.MultiLevelWriter(
-		// Add steaming for console 
+	multiLogger := zerolog.MultiLevelWriter(
+	
 		log.Output(zerolog.ConsoleWriter{Out: os.Stderr}),
-		// Add Logger for files 
+	
 		log.Output(&lumberjack.Logger{
 			Filename:   filename,
-			MaxSize:    10, // МБ
+			MaxSize:    10,
 			MaxBackups: 5,
-			// MaxAge:     28, // дней
+	
 			Compress: true,
 		}),
 	)
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	log.Logger = zerolog.New(multiLogger).With().Timestamp().Logger()
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 }
 
 func WrapWithLogging(next http.Handler) http.Handler {
