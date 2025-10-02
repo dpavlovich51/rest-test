@@ -55,15 +55,15 @@ func (h *UserHandler) SaveUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		sendError(w, fmt.Errorf("failed to parse json data"), http.StatusBadRequest)
 	}
+
 	user.Id = uuid.NewString()
-	userId, err := h.storage.SaveUser(r.Context(), user)
+	user.CreatedAt = time.Now()
+
+	_, err = h.storage.SaveUser(r.Context(), user)
 	if err != nil {
 		sendError(w, err, http.StatusInternalServerError)
 		return
 	}
-	user.Id = userId
-	user.CreatedAt = time.Now()
-
 	sendResponseOk(w, []m.User{user})
 }
 
