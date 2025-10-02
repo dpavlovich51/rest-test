@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	m "my_rest_server/model"
 	s "my_rest_server/storage"
@@ -61,6 +62,8 @@ func (h *UserHandler) SaveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user.Id = userId
+	user.CreatedAt = time.Now()
+
 	sendResponseOk(w, []m.User{user})
 }
 

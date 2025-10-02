@@ -28,7 +28,7 @@ func SetUpRouter() *mux.Router {
 }
 
 func newUserHandler() *userHandler.UserHandler {
-	storage, err := storage.NewClient("localhost:6379", "", 1)
+	storage, err := storage.NewClient("localhost:6379", "", 0)
 	if err != nil {
 		panic(fmt.Errorf("failed to connect to storage. error: %s", err))
 	}

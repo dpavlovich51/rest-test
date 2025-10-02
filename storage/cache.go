@@ -91,23 +91,25 @@ func (c *Cache) GetUser(ctx context.Context, userId string) (m.User, error) {
 }
 
 func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
-	// Get all user keys
-	keys, err := c.client.SMembers(ctx, UserSetName).Result()
-	log.Info().Msg(fmt.Sprintf("all keys: %s", keys))
+	// Get all user ids
+	ids, err := c.client.SMembers(ctx, UserSetName).Result()
+	log.Info().Msg(fmt.Sprintf("all keys: %s", ids))
 
 	if err != nil {
 		return &[]m.User{}, fmt.Errorf("failed to get all user keys. error: %s", err)
 	}
-	if len(keys) == 0 {
+	if len(ids) == 0 {
 		return &[]m.User{}, nil
 	}
 	// Result from redis
-	resultCmds := make([]*redis.StringCmd, len(keys))
+	resultCmds := make([]*redis.StringCmd, len(ids))
+
 	// Open pipe in order to send all cmds by one request
 	pipe := c.client.Pipeline()
 
-	for i, key := range keys {
-		resultCmds[i] = pipe.Get(ctx, userKey(key))
+	for i, id := range ids {
+		log.Info().Msg(fmt.Sprintf("add key: %s", userKey(id)))
+		resultCmds[i] = pipe.HGet(ctx, userKey(id), "data")
 	}
 	// Execute pipe
 	_, err = pipe.Exec(ctx)
@@ -115,7 +117,7 @@ func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
 		return nil, fmt.Errorf("failed to get all users from redis. error: %s", err)
 	}
 
-	users := make([]m.User, 0, len(keys))
+	users := make([]m.User, 0, len(ids))
 	for _, cmd := range resultCmds {
 		jsonData, err := cmd.Result()
 		if err != nil {
