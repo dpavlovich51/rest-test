@@ -146,7 +146,7 @@ func (c *Cache) DeleteUser(ctx context.Context, userId string) (m.User, error) {
 	pipe := c.client.TxPipeline()
 
 	pipe.Del(ctx, userKey)
-	pipe.SRem(ctx, "users", userKey)
+	pipe.SRem(ctx, "users", userId)
 
 	_, err = pipe.Exec(ctx)
 	if err != nil {
