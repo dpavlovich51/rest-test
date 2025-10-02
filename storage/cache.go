@@ -103,7 +103,6 @@ func (c *Cache) GetUser(ctx context.Context, userId string) (*m.User, error) {
 func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
 	// Get all user ids
 	ids, err := c.client.SMembers(ctx, UserSetName).Result()
-	log.Info().Msg(fmt.Sprintf("all keys: %s", ids))
 
 	if err != nil {
 		return &[]m.User{}, fmt.Errorf("failed to get all user keys. error: %s", err)
@@ -118,7 +117,6 @@ func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
 	pipe := c.client.Pipeline()
 
 	for i, id := range ids {
-		log.Info().Msg(fmt.Sprintf("add key: %s", userKey(id)))
 		resultCmds[i] = pipe.HGet(ctx, userKey(id), "data")
 	}
 	// Execute pipe
