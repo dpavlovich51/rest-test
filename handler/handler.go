@@ -2,10 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
+	e "my_rest_server/error"
 	m "my_rest_server/model"
 	s "my_rest_server/storage"
 
@@ -29,7 +31,7 @@ func NewInstance(store *s.Cache) *UserHandler {
 func (h *UserHandler) GetAllUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := h.storage.GetAllUsers(r.Context())
 	if err != nil {
-		sendError(w, err, http.StatusInternalServerError)
+		sendError(w, err)
 		return
 	}
 	sendResponseOk(w, *users)
@@ -38,30 +40,66 @@ func (h *UserHandler) GetAllUsers(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	userId, err := getUserId(r)
 	if err != nil {
-		sendError(w, fmt.Errorf("failed to find id"), http.StatusBadRequest)
+		sendError(w, e.NewError2(http.StatusBadRequest, "failed to find id", err))
 		return
 	}
 	user, err := h.storage.GetUser(r.Context(), userId)
 	if err != nil {
-		sendError(w, err, http.StatusNotFound)
+		sendError(w, e.NewError2(http.StatusBadRequest, "failed to find id", err))
 		return
 	}
-	sendResponseOk(w, []m.User{user})
+	sendResponseOk(w, []m.User{*user})
+}
+
+func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	userId, err := getUserId(r)
+	if err != nil {
+		sendError(w, e.NewError2(http.StatusBadRequest, "parameter: userId is missing", err))
+		return
+	}
+	// isExists, err := h.storage.IsUserExists(r.Context(), userId)
+	// if err != nil {
+	// 	sendError(w, err, http.StatusInternalServerError)
+	// 	return
+	// }
+	// if !isExists {
+	// 	sendError(w, fmt.Errorf("user: %s does not exist", userId), http.StatusInternalServerError)
+	// 	return
+	// }
+	var oldUser *m.User
+	oldUser, err = h.storage.GetUser(r.Context(), userId)
+	if err != nil {
+		sendError(w, err)
+		return
+	}
+	h.saveUserWithFields(w, r, func(user *m.User) {
+		(*user).Id = oldUser.Id
+		(*user).CreatedAt = oldUser.CreatedAt
+	})
 }
 
 func (h *UserHandler) SaveUser(w http.ResponseWriter, r *http.Request) {
+	h.saveUserWithFields(w, r, func(user *m.User) {
+		(*user).Id = uuid.NewString()
+		(*user).CreatedAt = time.Now()
+	})
+}
+
+func (h *UserHandler) saveUserWithFields(
+	w http.ResponseWriter,
+	r *http.Request,
+	override func(user *m.User),
+) {
 	var user m.User
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
-		sendError(w, fmt.Errorf("failed to parse json data"), http.StatusBadRequest)
+		sendError(w, e.NewError2(http.StatusBadRequest, "failed to parse json data", err))
 	}
-
-	user.Id = uuid.NewString()
-	user.CreatedAt = time.Now()
+	override(&user)
 
 	_, err = h.storage.SaveUser(r.Context(), user)
 	if err != nil {
-		sendError(w, err, http.StatusInternalServerError)
+		sendError(w, err)
 		return
 	}
 	sendResponseOk(w, []m.User{user})
@@ -70,15 +108,15 @@ func (h *UserHandler) SaveUser(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	userId, err := getUserId(r)
 	if err != nil {
-		sendError(w, err, http.StatusBadRequest)
+		sendError(w, e.NewError2(http.StatusBadRequest, "parameter: userId is missing", err))
 		return
 	}
 	deletedUser, err := h.storage.DeleteUser(r.Context(), userId)
 	if err != nil {
-		sendError(w, err, http.StatusInternalServerError)
+		sendError(w, err)
 		return
 	}
-	sendResponseOk(w, []m.User{deletedUser})
+	sendResponseOk(w, []m.User{*deletedUser})
 }
 
 func getUserId(r *http.Request) (string, error) {
@@ -98,9 +136,15 @@ func sendResponseOk(w http.ResponseWriter, users []m.User) {
 	json.NewEncoder(w).Encode(response{Data: users})
 }
 
-func sendError(w http.ResponseWriter, err error, status int) {
+func sendError(w http.ResponseWriter, err error) {
+	var domainErr *e.DomainError
+
 	setJsonContent(w)
-	w.WriteHeader(status)
+	if errors.As(err, &domainErr) {
+		w.WriteHeader(domainErr.Code)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 	json.NewEncoder(w).Encode(response{Error: err.Error()})
 }
 

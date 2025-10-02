@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
@@ -11,6 +12,7 @@ import (
 	// "github.com/rs/zerolog/log"
 
 	"encoding/json"
+	e "my_rest_server/error"
 	m "my_rest_server/model"
 )
 
@@ -38,6 +40,10 @@ func NewClient(addr string, password string, db int) (*Cache, error) {
 	return &Cache{
 		client: *client,
 	}, nil
+}
+
+func (c *Cache) IsUserExists(ctx context.Context, userId string) (bool, error) {
+	return c.client.HExists(ctx, userKey(userId), "data").Result()
 }
 
 func (c *Cache) SaveUser(ctx context.Context, user m.User) (string, error) {
@@ -69,25 +75,29 @@ func userKey(uuid string) string {
 	return UserKeyPrefix + uuid
 }
 
-func (c *Cache) GetUser(ctx context.Context, userId string) (m.User, error) {
+func (c *Cache) GetUser(ctx context.Context, userId string) (*m.User, error) {
 	var user m.User
 
 	data, err := c.client.HGet(ctx, userKey(userId), "data").Result()
 	// 404
 	if err == redis.Nil {
-		return user, fmt.Errorf("user: %s not found. error: ", err)
+		return &user, e.NewError2(
+			http.StatusNotFound,
+			fmt.Sprintf("user: %s not found", userId),
+			err,
+		)
 	}
 	// 500
 	if err != nil {
-		return user, fmt.Errorf("failed to get user: %s. error: ", err)
+		return &user, fmt.Errorf("failed to get user: %s. error: %s", userId, err)
 	}
 	// 500
 	err = json.Unmarshal([]byte(data), &user)
 	if err != nil {
-		return user, fmt.Errorf("failed to parse user json: %s from redis. error: %s", data, err)
+		return &user, fmt.Errorf("failed to parse user json: %s from redis. error: %s", data, err)
 	}
 	// 200
-	return user, nil
+	return &user, nil
 }
 
 func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
@@ -135,8 +145,8 @@ func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
 	return &users, nil
 }
 
-func (c *Cache) DeleteUser(ctx context.Context, userId string) (m.User, error) {
-	var user m.User
+func (c *Cache) DeleteUser(ctx context.Context, userId string) (*m.User, error) {
+	var user *m.User
 
 	user, err := c.GetUser(ctx, userId)
 	if err != nil {
