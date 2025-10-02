@@ -2,11 +2,13 @@ package config
 
 import (
 	// Add conviniet router
+	"fmt"
+	userHandler "my_rest_server/handler"
+	"my_rest_server/storage"
+
 	"github.com/gorilla/mux"
 	// Add server library
-	"net/http"
 	// Add logger
-	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -14,34 +16,22 @@ var (
 )
 
 func SetUpRouter() *mux.Router {
+	userHandler := newUserHandler()
 
-	router.HandleFunc("/messages", GetAllMessages).Methods("GET")
-	router.HandleFunc("/messages/{id}", GetMessage).Methods("GET")
-	router.HandleFunc("/messages", PostMessage).Methods("POST")
-	router.HandleFunc("/messages/{id}", PutMessage).Methods("PUT")
-	router.HandleFunc("/messages/{id}", DeleteMessage).Methods("DELETE")
+	router.HandleFunc("/users", userHandler.GetAllUsers).Methods("GET")
+	router.HandleFunc("/users/{id}", userHandler.GetUser).Methods("GET")
+	router.HandleFunc("/users", userHandler.SaveUser).Methods("POST")
+	router.HandleFunc("/users/{id}", userHandler.SaveUser).Methods("PUT")
+	router.HandleFunc("/users/{id}", userHandler.DeleteUser).Methods("DELETE")
 
-	// todo: Add POST, PUT, DELETE methods
 	return router
 }
 
-func GetAllMessages(response http.ResponseWriter, request *http.Request) {
-	log.Info().Msg("Called GetAllMessages")
-}
-
-func GetMessage(response http.ResponseWriter, request *http.Request) {
-	vars := mux.Vars(request)
-	log.Info().Msgf("Called GetMessage with id: %s", vars["id"])
-}
-
-func PostMessage(response http.ResponseWriter, request *http.Request) {
-	log.Info().Msg("Called PostMessage")
-}
-
-func PutMessage(response http.ResponseWriter, request *http.Request) {
-	log.Info().Msg("Called PutMessage")
-}
-
-func DeleteMessage(response http.ResponseWriter, request *http.Request) {
-	log.Info().Msg("Called DeleteMessage")
+func newUserHandler() *userHandler.UserHandler {
+	storage, err := storage.NewClient("localhost:6379", "", 1)
+	if err != nil {
+		panic(fmt.Errorf("failed to connect to storage. error: %s", err))
+	}
+	userHandler := userHandler.NewInstance(storage)
+	return userHandler
 }

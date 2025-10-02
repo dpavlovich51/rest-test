@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 
@@ -22,7 +21,6 @@ const (
 
 type Cache struct {
 	client redis.Client
-	ctx    context.Context
 }
 
 func NewClient(addr string, password string, db int) (*Cache, error) {
@@ -39,16 +37,15 @@ func NewClient(addr string, password string, db int) (*Cache, error) {
 	}
 	return &Cache{
 		client: *client,
-		ctx:    ctx,
 	}, nil
 }
 
-func (c *Cache) SaveUser(user m.User) (uuid.UUID, error) {
+func (c *Cache) SaveUser(ctx context.Context, user m.User) (string, error) {
 
 	// to json
 	data, err := json.Marshal(user)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed map user: %s to json. Error: %v", user, err)
+		return "", fmt.Errorf("failed map user: %s to json. Error: %v", user, err)
 	}
 
 	key := userKey(user.Id)
@@ -56,30 +53,26 @@ func (c *Cache) SaveUser(user m.User) (uuid.UUID, error) {
 	pipe := c.client.TxPipeline()
 
 	// Save user
-	pipe.HSet(c.ctx, key, "data", data)
+	pipe.HSet(ctx, key, "data", data)
 	// Save user id
-	pipe.SAdd(c.ctx, UserSetName, user.Id)
+	pipe.SAdd(ctx, UserSetName, user.Id)
 
 	// Commit transaction
-	_, err = pipe.Exec(c.ctx)
+	_, err = pipe.Exec(ctx)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to save user: %s. Error: %v", user, err)
+		return "", fmt.Errorf("failed to save user: %s. Error: %v", user, err)
 	}
 	return user.Id, nil
 }
 
-func userKey(uuid uuid.UUID) string {
-	return UserKeyPrefix + uuid.String()
+func userKey(uuid string) string {
+	return UserKeyPrefix + uuid
 }
 
-func (c *Cache) GetUser(id uuid.UUID) (m.User, error) {
-	return getUser(c, userKey(id))
-}
-
-func getUser(c *Cache, key string) (m.User, error) {
+func (c *Cache) GetUser(ctx context.Context, userId string) (m.User, error) {
 	var user m.User
 
-	data, err := c.client.HGet(c.ctx, key, "data").Result()
+	data, err := c.client.HGet(ctx, userKey(userId), "data").Result()
 	// 404
 	if err == redis.Nil {
 		return user, fmt.Errorf("user: %s not found. error: ", err)
@@ -97,36 +90,36 @@ func getUser(c *Cache, key string) (m.User, error) {
 	return user, nil
 }
 
-func (c *Cache) GetAllUsers() ([]m.User, error) {
+func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
 	// Get all user keys
-	keys, err := c.client.SMembers(c.ctx, UserSetName).Result()
+	keys, err := c.client.SMembers(ctx, UserSetName).Result()
+	log.Info().Msg(fmt.Sprintf("all keys: %s", keys))
+
 	if err != nil {
-		return []m.User{}, fmt.Errorf("failed to get all user keys. error: %s", err)
+		return &[]m.User{}, fmt.Errorf("failed to get all user keys. error: %s", err)
 	}
 	if len(keys) == 0 {
-		return []m.User{}, nil
+		return &[]m.User{}, nil
 	}
-
+	// Result from redis
+	resultCmds := make([]*redis.StringCmd, len(keys))
 	// Open pipe in order to send all cmds by one request
 	pipe := c.client.Pipeline()
-	// Result from redis
-	cmds := make([]*redis.StringCmd, len(keys))
 
 	for i, key := range keys {
-		cmds[i] = pipe.Get(c.ctx, key)
+		resultCmds[i] = pipe.Get(ctx, userKey(key))
 	}
-
 	// Execute pipe
-	_, err = pipe.Exec(c.ctx)
+	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all users from redis. error: %s", err)
 	}
 
 	users := make([]m.User, 0, len(keys))
-	for _, cmd := range cmds {
+	for _, cmd := range resultCmds {
 		jsonData, err := cmd.Result()
 		if err != nil {
-			log.Warn().Msg(fmt.Sprintf("Failed to get user data. error: %s", err))
+			log.Warn().Msg(fmt.Sprintf("failed to get user data. error: %s", err))
 			continue
 		}
 		var user m.User
@@ -137,22 +130,25 @@ func (c *Cache) GetAllUsers() ([]m.User, error) {
 		}
 		users = append(users, user)
 	}
-	return users, nil
+	return &users, nil
 }
 
-func (c *Cache) DeleteUser(userId uuid.UUID) (bool, error) {
+func (c *Cache) DeleteUser(ctx context.Context, userId string) (m.User, error) {
+	var user m.User
 
+	user, err := c.GetUser(ctx, userId)
+	if err != nil {
+		return user, fmt.Errorf("failed to find user: %s", userId)
+	}
 	userKey := userKey(userId)
 	pipe := c.client.TxPipeline()
 
-	pipe.Del(c.ctx, userKey)
-	pipe.SRem(c.ctx, "users", userKey)
+	pipe.Del(ctx, userKey)
+	pipe.SRem(ctx, "users", userKey)
 
-	_, err := pipe.Exec(c.ctx)
+	_, err = pipe.Exec(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to delete user: %s. error: %s", userId.String(), err)
+		return user, fmt.Errorf("failed to delete user: %s. error: %s", userId, err)
 	}
-	return true, nil
+	return user, nil
 }
-
-
