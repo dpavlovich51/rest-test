@@ -2,9 +2,8 @@ package config
 
 import (
 	// Add conviniet router
-	"fmt"
 	userHandler "my_rest_server/handler"
-	"my_rest_server/storage"
+	service "my_rest_server/service"
 
 	"github.com/gorilla/mux"
 	// Add server library
@@ -15,8 +14,8 @@ var (
 	router = mux.NewRouter()
 )
 
-func SetUpRouter() *mux.Router {
-	userHandler := newUserHandler()
+func SetupRouter(userService *service.UserService) *mux.Router {
+	userHandler := userHandler.NewInstance(userService)
 
 	router.HandleFunc("/users", userHandler.GetAllUsers).Methods("GET")
 	router.HandleFunc("/users/{id}", userHandler.GetUser).Methods("GET")
@@ -25,13 +24,4 @@ func SetUpRouter() *mux.Router {
 	router.HandleFunc("/users/{id}", userHandler.DeleteUser).Methods("DELETE")
 
 	return router
-}
-
-func newUserHandler() *userHandler.UserHandler {
-	storage, err := storage.NewClient("localhost:6379", "", 0)
-	if err != nil {
-		panic(fmt.Errorf("failed to connect to storage. error: %s", err))
-	}
-	userHandler := userHandler.NewInstance(storage)
-	return userHandler
 }

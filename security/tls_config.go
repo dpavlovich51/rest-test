@@ -6,13 +6,13 @@ import (
 	"os"
 )
 
-func NewtlsConfig() (*tls.Config, error) {
+func NewTLSConfig() (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair("./tls/client.cert.pem", "./tls/client.key.pem")
 	if err != nil {
 		return nil, err
 	}
 
-	caCert, err := os.ReadFile("./tls/ca.cert.pem")
+	caCert, err := os.ReadFile("./tls/ca.crt")
 	if err != nil {
 		return nil, err
 	}

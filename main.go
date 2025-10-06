@@ -11,23 +11,25 @@ import (
 )
 
 var (
-	port string = "8080"
+	port string = "8081"
 )
 
 func main() {
 
-	config.SetUpLogger()
 	startServer()
 
 }
 
 func startServer() {
 	log.Info().Msgf("Starting REST server on %s port...", port)
-	defer func() { log.Info().Msg("Server stoped.") }()
+	config := config.SetupApp()
 
-	router := config.WrapWithLogging(config.SetUpRouter())
+	defer func() {
+		log.Info().Msg("Stoping server.")
+		config.Close()
+	}()
 
-	if err := http.ListenAndServe(":"+port, router); err != nil {
+	if err := http.ListenAndServe(":"+port, config.RouterHandler); err != nil {
 		log.Error().Msgf("Ошибка запуска сервера: %v", err)
 	}
 }

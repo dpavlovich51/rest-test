@@ -1,4 +1,4 @@
-package storage
+package service
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	// "github.com/rs/zerolog/log"
 
 	"encoding/json"
+	"my_rest_server/client"
 	e "my_rest_server/error"
 	m "my_rest_server/model"
 )
@@ -21,11 +22,17 @@ const (
 	UserSetName   = "users"
 )
 
-type Cache struct {
-	client redis.Client
+type UserService struct {
+	client        *redis.Client
+	kafkaProducer *client.KafkaProducer
 }
 
-func NewClient(addr string, password string, db int) (*Cache, error) {
+func NewUserService(
+	addr string,
+	password string,
+	db int,
+	kafkaProducer *client.KafkaProducer,
+) (*UserService, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,
@@ -37,16 +44,17 @@ func NewClient(addr string, password string, db int) (*Cache, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Redis. %s", err)
 	}
-	return &Cache{
-		client: *client,
+	return &UserService{
+		client:        client,
+		kafkaProducer: kafkaProducer,
 	}, nil
 }
 
-func (c *Cache) IsUserExists(ctx context.Context, userId string) (bool, error) {
+func (c *UserService) IsUserExists(ctx context.Context, userId string) (bool, error) {
 	return c.client.HExists(ctx, userKey(userId), "data").Result()
 }
 
-func (c *Cache) SaveUser(ctx context.Context, user m.User) (string, error) {
+func (c *UserService) SaveUser(ctx context.Context, user m.User) (string, error) {
 
 	// to json
 	data, err := json.Marshal(user)
@@ -68,6 +76,8 @@ func (c *Cache) SaveUser(ctx context.Context, user m.User) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to save user: %s. Error: %v", user, err)
 	}
+
+	c.kafkaProducer.ProduceMessage(string(data))
 	return user.Id, nil
 }
 
@@ -75,7 +85,7 @@ func userKey(uuid string) string {
 	return UserKeyPrefix + uuid
 }
 
-func (c *Cache) GetUser(ctx context.Context, userId string) (*m.User, error) {
+func (c *UserService) GetUser(ctx context.Context, userId string) (*m.User, error) {
 	var user m.User
 
 	data, err := c.client.HGet(ctx, userKey(userId), "data").Result()
@@ -100,7 +110,7 @@ func (c *Cache) GetUser(ctx context.Context, userId string) (*m.User, error) {
 	return &user, nil
 }
 
-func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
+func (c *UserService) GetAllUsers(ctx context.Context) (*[]m.User, error) {
 	// Get all user ids
 	ids, err := c.client.SMembers(ctx, UserSetName).Result()
 
@@ -143,7 +153,7 @@ func (c *Cache) GetAllUsers(ctx context.Context) (*[]m.User, error) {
 	return &users, nil
 }
 
-func (c *Cache) DeleteUser(ctx context.Context, userId string) (*m.User, error) {
+func (c *UserService) DeleteUser(ctx context.Context, userId string) (*m.User, error) {
 	var user *m.User
 
 	user, err := c.GetUser(ctx, userId)
@@ -161,4 +171,12 @@ func (c *Cache) DeleteUser(ctx context.Context, userId string) (*m.User, error) 
 		return user, fmt.Errorf("failed to delete user: %s. error: %s", userId, err)
 	}
 	return user, nil
+}
+
+func (u *UserService) Close() error {
+	err := u.client.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close redis client. error: %s", err)
+	}
+	return nil
 }

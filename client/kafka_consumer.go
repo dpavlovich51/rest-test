@@ -1,4 +1,4 @@
-package service
+package client
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func (c *KafkaConsumer) ListenMessages(ctx context.Context) {
 		default:
 			message, err := c.readMessage(ctx)
 			if err != nil {
-				log.Error().Err(err).Msg("failed to read message")
+				log.Warn().Err(err).Msg("failed to read message")
 				continue
 			}
 			log.Info().Msgf(

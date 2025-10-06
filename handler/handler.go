@@ -9,7 +9,7 @@ import (
 
 	e "my_rest_server/error"
 	m "my_rest_server/model"
-	s "my_rest_server/storage"
+	s "my_rest_server/service"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -21,10 +21,10 @@ type response struct {
 }
 
 type UserHandler struct {
-	storage *s.Cache
+	storage *s.UserService
 }
 
-func NewInstance(store *s.Cache) *UserHandler {
+func NewInstance(store *s.UserService) *UserHandler {
 	return &UserHandler{storage: store}
 }
 
